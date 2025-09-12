@@ -1,5 +1,5 @@
 //	===== Definitions, Installation and Updates =====
-def driverVer() { return "1.0.0" }
+def driverVer() { return "1.1.0" }
 def apiLevel() { return 20180604 }	//	bleBox latest SaunaBox API Level, 3.19.2025
 
 //import groovy.json.JsonSlurper 
@@ -18,9 +18,13 @@ metadata {
     section("SaunaBox IP Address (x.x.x.x):") {
         input "saunaBoxIP", "string", required: true, title: "IP?"
     }
-    section("Default temp") {
-      input "defaultTemp", "integer", title:"Temp", required:true, defaultValue:170
-    }
+     section("Default temp") {
+       input "defaultTemp", "integer", title:"Temp", required:true, defaultValue:170
+     }
+
+     section("Auto shutoff timer (minutes)") {
+         input "autoOffMinutes", "integer", title:"Auto-off timer (minutes)", required:true, defaultValue:60
+     }
      
      section("Temperature units") {
          input "isFahrenheit", "bool", title:"Use Imperial units?", required:true, defaultValue:true
@@ -120,31 +124,32 @@ def GetSaunaStatus() {
 }                      
                       
 def SaunaOff() {
-	logDebug("SaunaOff")
-	def command = "/s/0"
-	
+    logDebug("SaunaOff")
+    unschedule("autoShutoff")
+    def command = "/s/0"
+
     logDebug ("saunaOff: command - " + command)
-        
-       makeHttpRequest("GET", command) { response ->
+
+    makeHttpRequest("GET", command) { response ->
         if (response.status == 200) {
             logDebug ("Succeeded Response data - ${response.status} - ${response.data}")
         } else {
             log.error "Failed - Response data: ${response.status} - ${response.data}"
         }
     }
-    
+
     GetSaunaStatus()
     logDebug("SaunaOff: Setting refresh time to 30 minutes")
     runEvery30Minutes ("GetSaunaStatus")
 }
 
 def SaunaOn() {
-	logDebug("SaunaOn")
-	def command = "/s/1"
-	
+    logDebug("SaunaOn")
+    def command = "/s/1"
+
     logDebug ("saunaOn: command - " + command)
-        
-       makeHttpRequest("GET", command) { response ->
+
+    makeHttpRequest("GET", command) { response ->
         if (response.status == 200) {
             logDebug("Succeeded Response data - ${response.status} - ${response.data}")
         } else {
@@ -155,6 +160,14 @@ def SaunaOn() {
     logDebug("SaunaOn: Setting refresh time to 1 minutes")
     runEvery1Minute ("GetSaunaStatus")
 
+    Integer minutes = settings?.autoOffMinutes ? settings.autoOffMinutes.toInteger() : 60
+    logDebug("SaunaOn: Scheduling auto shutoff in ${minutes} minutes")
+    runIn(minutes * 60, "autoShutoff", [overwrite: true])
+}
+
+def autoShutoff() {
+    logDebug("autoShutoff: timer elapsed, turning off")
+    SaunaOff()
 }
 
 //set temp points
