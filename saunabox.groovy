@@ -1,5 +1,6 @@
 //	===== Definitions, Installation and Updates =====
-def driverVer() { return "1.1.0" }
+//https://technical.blebox.eu/archives/saunaBoxAPI/
+def driverVer() { return "1.1.1" }
 def apiLevel() { return 20180604 }	//	bleBox latest SaunaBox API Level, 3.19.2025
 
 //import groovy.json.JsonSlurper 
@@ -26,6 +27,26 @@ metadata {
          input "autoOffMinutes", "integer", title:"Auto-off timer (minutes)", required:true, defaultValue:60
      }
      
+     section("Polling interval when OFF (minutes)") {
+         input "pollingIntervalOff", "enum", 
+               title:"Check status every X minutes when OFF", 
+               required:true, 
+               defaultValue:"5",
+               options: ["1", "5", "10", "15", "30"]
+     }
+     
+     section("Timer compensation for external turn-on") {
+         input "timerCompensation", "enum",
+               title:"How to adjust timer when detecting external turn-on",
+               required:true,
+               defaultValue:"conservative",
+               options: [
+                   "conservative": "Conservative - Subtract full polling interval (safest, may run short)",
+                   "balanced": "Balanced - Subtract half polling interval (average)",
+                   "off": "None - Use full timer (may run over intended time)"
+               ]
+     }
+     
      section("Temperature units") {
          input "isFahrenheit", "bool", title:"Use Imperial units?", required:true, defaultValue:true
      }
@@ -39,14 +60,7 @@ def initialize() {
     //called on hub startup if driver specifies cabaility "initalize"
     logDebug ("initialize: Running")
     GetSaunaStatus()
-    if (state.thermoStateMode == "heat") {
-        logDebug("initialize: Setting refresh time to 1 minute")
-        runEvery1Minute ("GetSaunaStatus")
-    }
-    else {
-        logDebug("initialize: Setting refresh time to 30 minutes}")
-        runEvery30Minutes ("GetSaunaStatus")
-	}
+    updatePollingSchedule()
 }
        
 def installed() {
@@ -68,6 +82,42 @@ def updated() {
 def uninstalled() {
     unschedule()
     logDebug ("uninstalled: Running" )
+}
+
+def updatePollingSchedule() {
+    // Cancel all existing schedules first
+    unschedule("GetSaunaStatus")
+    
+    def currentMode = device.currentValue("thermostatMode")
+    logDebug("updatePollingSchedule: Current mode is ${currentMode}")
+    
+    if (currentMode == "heat") {
+        logDebug("updatePollingSchedule: Setting refresh time to 1 minute")
+        runEvery1Minute("GetSaunaStatus")
+    }
+    else {
+        // Use configurable polling interval when off
+        def pollMinutes = settings?.pollingIntervalOff ?: "5"
+        logDebug("updatePollingSchedule: Setting refresh time to ${pollMinutes} minutes")
+        
+        switch(pollMinutes) {
+            case "1":
+                runEvery1Minute("GetSaunaStatus")
+                break
+            case "5":
+                runEvery5Minutes("GetSaunaStatus")
+                break
+            case "10":
+                runEvery10Minutes("GetSaunaStatus")
+                break
+            case "15":
+                runEvery15Minutes("GetSaunaStatus")
+                break
+            case "30":
+                runEvery30Minutes("GetSaunaStatus")
+                break
+        }
+	}
 }
 
 def GetSaunaStatusHandler(resp, data) {
@@ -96,14 +146,74 @@ def doPoll(response){
             sendEvent(name: "heatingSetpoint", value: convertTemp(objSaunaStatus.heat.desiredTemp), unit: unit)
             sendEvent(name: "thermostatSetpoint", value: convertTemp(objSaunaStatus.heat.desiredTemp), unit: unit)
            
+            def previousMode = device.currentValue("thermostatMode")
+            def newMode
+            def newState
+            
             if (objSaunaStatus.heat.state == 0) {
-               sendEvent(name: "thermostatMode", value: "off")
-               sendEvent(name: "thermostatOperatingState", value: "idle") 
+               newMode = "off"
+               newState = "idle"
             }
             else {
-               sendEvent(name: "thermostatMode", value: "heat")
-               sendEvent(name: "thermostatOperatingState", value: "heating")
+               newMode = "heat"
+               newState = "heating"
             }    
+            
+            sendEvent(name: "thermostatMode", value: newMode)
+            sendEvent(name: "thermostatOperatingState", value: newState)
+            
+            // Handle external state changes
+            if (previousMode != newMode) {
+                logDebug("doPoll: Mode changed from ${previousMode} to ${newMode}")
+                
+                if (newMode == "heat" && previousMode == "off") {
+                    // Sauna was turned on externally - start timer with compensation
+                    logDebug("doPoll: External turn-on detected, starting auto-shutoff timer with compensation")
+                    
+                    Integer autoOffMinutes = settings?.autoOffMinutes ? settings.autoOffMinutes.toInteger() : 60
+                    def pollingInterval = settings?.pollingIntervalOff ? settings.pollingIntervalOff.toInteger() : 5
+                    def compensationStrategy = settings?.timerCompensation ?: "conservative"
+                    
+                    Integer compensatedMinutes
+                    switch(compensationStrategy) {
+                        case "conservative":
+                            // Subtract full polling interval - safest option
+                            compensatedMinutes = autoOffMinutes - pollingInterval
+                            logDebug("doPoll: Using conservative compensation: ${autoOffMinutes} - ${pollingInterval} = ${compensatedMinutes} minutes")
+                            break
+                        case "balanced":
+                            // Subtract half polling interval - balanced approach
+                            compensatedMinutes = autoOffMinutes - (pollingInterval / 2)
+                            logDebug("doPoll: Using balanced compensation: ${autoOffMinutes} - ${pollingInterval/2} = ${compensatedMinutes} minutes")
+                            break
+                        case "off":
+                            // No compensation - use full timer
+                            compensatedMinutes = autoOffMinutes
+                            logDebug("doPoll: No compensation, using full timer: ${compensatedMinutes} minutes")
+                            break
+                        default:
+                            compensatedMinutes = autoOffMinutes - pollingInterval
+                            logDebug("doPoll: Unknown strategy, defaulting to conservative: ${compensatedMinutes} minutes")
+                            break
+                    }
+                    
+                    // Ensure we don't set a negative or zero timer
+                    if (compensatedMinutes <= 0) {
+                        logDebug("doPoll: Compensated time is ${compensatedMinutes}, turning off immediately")
+                        SaunaOff()
+                    } else {
+                        runIn(compensatedMinutes * 60, "autoShutoff", [overwrite: true])
+                    }
+                }
+                else if (newMode == "off" && previousMode == "heat") {
+                    // Sauna was turned off externally
+                    logDebug("doPoll: External turn-off detected, cancelling auto-shutoff timer")
+                    unschedule("autoShutoff")
+                }
+                
+                // Update polling schedule
+                updatePollingSchedule()
+            }
            
             sendEvent(name: "temperature", value: convertTemp(objSaunaStatus.heat.sensors[0].value), unit: unit)
             sendEvent(name: "supportedThermostatModes", value: ["heat", "off"])
@@ -124,45 +234,63 @@ def GetSaunaStatus() {
 }                      
                       
 def SaunaOff() {
-    logDebug("SaunaOff")
+    logDebug("SaunaOff: Running")
+    
+    // Cancel the auto-shutoff timer
     unschedule("autoShutoff")
+    logDebug("SaunaOff: Cancelled auto-shutoff timer")
+    
     def command = "/s/0"
 
-    logDebug ("saunaOff: command - " + command)
+    logDebug ("SaunaOff: command - " + command)
 
     makeHttpRequest("GET", command) { response ->
         if (response.status == 200) {
-            logDebug ("Succeeded Response data - ${response.status} - ${response.data}")
+            logDebug ("SaunaOff: Succeeded Response data - ${response.status} - ${response.data}")
+            
+            // Update mode immediately
+            sendEvent(name: "thermostatMode", value: "off")
+            sendEvent(name: "thermostatOperatingState", value: "idle")
+            
+            // Update polling schedule
+            updatePollingSchedule()
+            
+            // Refresh status
+            runIn(2, "GetSaunaStatus")
         } else {
-            log.error "Failed - Response data: ${response.status} - ${response.data}"
+            log.error "SaunaOff: Failed - Response data: ${response.status} - ${response.data}"
         }
     }
-
-    GetSaunaStatus()
-    logDebug("SaunaOff: Setting refresh time to 30 minutes")
-    runEvery30Minutes ("GetSaunaStatus")
 }
 
 def SaunaOn() {
-    logDebug("SaunaOn")
+    logDebug("SaunaOn: Running")
     def command = "/s/1"
 
-    logDebug ("saunaOn: command - " + command)
+    logDebug ("SaunaOn: command - " + command)
 
     makeHttpRequest("GET", command) { response ->
         if (response.status == 200) {
-            logDebug("Succeeded Response data - ${response.status} - ${response.data}")
+            logDebug("SaunaOn: Succeeded Response data - ${response.status} - ${response.data}")
+            
+            // Update mode immediately
+            sendEvent(name: "thermostatMode", value: "heat")
+            sendEvent(name: "thermostatOperatingState", value: "heating")
+            
+            // Update polling schedule
+            updatePollingSchedule()
+            
+            // Schedule auto-shutoff
+            Integer minutes = settings?.autoOffMinutes ? settings.autoOffMinutes.toInteger() : 60
+            logDebug("SaunaOn: Scheduling auto shutoff in ${minutes} minutes")
+            runIn(minutes * 60, "autoShutoff", [overwrite: true])
+            
+            // Refresh status
+            runIn(2, "GetSaunaStatus")
         } else {
-            log.error "Failed - Response data: ${response.status} - ${response.data}"
+            log.error "SaunaOn: Failed - Response data: ${response.status} - ${response.data}"
         }
     }
-    GetSaunaStatus()
-    logDebug("SaunaOn: Setting refresh time to 1 minutes")
-    runEvery1Minute ("GetSaunaStatus")
-
-    Integer minutes = settings?.autoOffMinutes ? settings.autoOffMinutes.toInteger() : 60
-    logDebug("SaunaOn: Scheduling auto shutoff in ${minutes} minutes")
-    runIn(minutes * 60, "autoShutoff", [overwrite: true])
 }
 
 def autoShutoff() {
@@ -212,7 +340,7 @@ def setThermostatMode(mode) {
 }
 
 def setTargetTemperature(temp) {
-    if (IsDebug) {log.debug "setTargetTemperature: Setting target temperature to ${temp}°F" }
+    if (isDebug) {log.debug "setTargetTemperature: Setting target temperature to ${temp}°F" }
     def originalTemp = temp
     
     def unit
@@ -289,4 +417,3 @@ def makeHttpRequest(method, path, closure) {
         log.error "Error in ${method} request: ${e.message}"
     }
 }
-                    
