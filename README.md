@@ -1,287 +1,392 @@
-# hubitat-saunabox
+# Blebox Saunabox Driver for Hubitat
 
-# Sauna Driver - Configurable Version Guide
+A Hubitat Elevation driver for controlling and monitoring Blebox SaunaBox devices. This driver provides full thermostat integration, automatic safety shutoff, and intelligent polling to seamlessly integrate your sauna into your smart home.
 
 ## Overview
 
-This driver now gives you complete control over:
-1. **Auto-shutoff timer duration** (default: 60 minutes)
-2. **Polling interval when OFF** (default: 5 minutes)
-3. **Timer compensation strategy** (default: Conservative)
+The Blebox SaunaBox is a WiFi-enabled controller that turns any traditional sauna into a smart sauna. This Hubitat driver allows you to:
 
-## Understanding the Settings
+- **Control your sauna** remotely from Hubitat dashboards, rules, and apps
+- **Monitor temperature** in real-time with automatic updates
+- **Set target temperatures** for your sauna sessions
+- **Automatic safety shutoff** - never worry about leaving the sauna on
+- **Works with physical controls** - detects and responds to manual button presses
+- **Dashboard integration** - displays as a thermostat with full control
 
-### 1. Auto Shutoff Timer (minutes)
-**What it does:** Automatically turns off the sauna after this many minutes
-**Default:** 60 minutes
-**Typical range:** 30-120 minutes
+### Key Features
 
-**Example:**
-- Set to 60: Sauna turns off after 1 hour
-- Set to 90: Sauna turns off after 1.5 hours
+#### 🔥 Smart Control
+- Turn sauna on/off from anywhere
+- Set and maintain target temperatures
+- Full Hubitat thermostat capability integration
+- Works with Hubitat dashboards and automations
 
-### 2. Polling Interval When OFF (minutes)
-**What it does:** How often to check sauna status when it's off
-**Default:** 5 minutes
-**Options:** 1, 5, 10, 15, or 30 minutes
+#### 🛡️ Safety First
+- Configurable auto-shutoff timer (default: 60 minutes)
+- Timer works regardless of how sauna was turned on (app, physical button, etc.)
+- Intelligent compensation for external turn-ons
+- Automatic timer cancellation when turned off
 
-**Impact on detection time:**
-- 1 minute: External turn-on detected within 1 minute (most network load)
-- 5 minutes: External turn-on detected within 5 minutes (recommended)
-- 10 minutes: External turn-on detected within 10 minutes (balanced)
-- 15 minutes: External turn-on detected within 15 minutes (less network load)
-- 30 minutes: External turn-on detected within 30 minutes (not recommended)
+#### 🔄 Intelligent Polling
+- Fast polling (1 minute) when sauna is ON - real-time temperature updates
+- Configurable slow polling when OFF - saves network bandwidth
+- Automatic detection of external state changes
+- Adjusts polling frequency based on sauna state
 
-**When ON:** Always polls every 1 minute regardless of this setting
+#### ⚙️ Highly Configurable
+- Auto-shutoff duration
+- Polling intervals (1, 5, 10, 15, or 30 minutes)
+- Timer compensation strategies (Conservative, Balanced, None)
+- Imperial or Metric temperature units
+- Debug logging
 
-### 3. Timer Compensation Strategy
-**What it does:** Adjusts the auto-shutoff timer when an external turn-on is detected
+## Requirements
 
-**Why needed:** When you turn the sauna on via physical button, the driver doesn't know about it until the next polling cycle. The sauna has been running for somewhere between 0 and [polling interval] minutes.
+- **Hardware**: Blebox SaunaBox device installed in your sauna
+- **Hub**: Hubitat Elevation hub (C-7 or newer recommended)
+- **Network**: SaunaBox and Hubitat on same network (or routable)
+- **API**: SaunaBox API Level 20180604 or newer
 
-#### Strategy Options:
+## Installation
 
-**Conservative (Recommended):**
-- Subtracts the FULL polling interval from the timer
-- **Guarantees** sauna never runs longer than intended
-- May run slightly shorter than intended if detected quickly
-- Formula: `Timer = Auto-off setting - Polling interval`
+### Step 1: Add the Driver Code
 
-**Balanced:**
-- Subtracts HALF the polling interval from the timer
-- Averages out over many uses
-- May run slightly over or under intended time
-- Formula: `Timer = Auto-off setting - (Polling interval / 2)`
+1. Log into your Hubitat hub
+2. Navigate to **Drivers Code**
+3. Click **+ New Driver**
+4. Copy and paste the contents of `Driver_Fixed_Simple.groovy`
+5. Click **Save**
 
-**None:**
-- Uses full timer regardless of when detected
-- User always gets full intended runtime
-- May run up to [polling interval] over intended time
-- Formula: `Timer = Auto-off setting`
+### Step 2: Create a Virtual Device
 
----
+1. Navigate to **Devices**
+2. Click **+ Add Virtual Device**
+3. Enter a descriptive name (e.g., "Sauna")
+4. Select **Type**: "Blebox Saunabox"
+5. Click **Save Device**
 
-## Example Scenarios
+### Step 3: Configure the Device
 
-### Scenario A: Conservative + 5 min polling
-**Settings:**
-- Auto-shutoff: 60 minutes
-- Polling interval: 5 minutes
-- Compensation: Conservative
+1. Click on your new sauna device
+2. Scroll to **Preferences**
+3. Configure the required settings:
+   - **SaunaBox IP Address**: Your SaunaBox's local IP (e.g., 192.168.1.100)
+   - **Default temp**: Your preferred sauna temperature (default: 170°F)
+   - **Auto shutoff timer**: How long before auto-shutoff (default: 60 minutes)
+   - **Polling interval when OFF**: How often to check status (default: 5 minutes)
+   - **Timer compensation**: Safety strategy (default: Conservative)
+   - **Use Imperial units**: Temperature display (default: true for Fahrenheit)
+4. Click **Save Preferences**
 
-**Timeline:**
-- 3:00 PM - Press physical button
-- 3:03 PM - Driver detects it's on (next poll)
-- Timer starts at 55 minutes (60 - 5)
-- 3:58 PM - Auto-shutoff triggers
-- **Total runtime: 58 minutes** ✅
+### Step 4: Test
 
-**Analysis:**
-- Intended: 60 min
-- Actual: 58 min
-- Difference: -2 min (ran 2 min short)
-- Safety: ✅ Never over
+1. Click the **Refresh** button to get initial status
+2. Try turning the sauna on/off using the device controls
+3. Check that temperature updates appear
+4. Test the physical button on your sauna - verify driver detects the change
 
----
+## Quick Start Configuration
 
-### Scenario B: Balanced + 10 min polling
-**Settings:**
-- Auto-shutoff: 60 minutes
-- Polling interval: 10 minutes
-- Compensation: Balanced
-
-**Timeline:**
-- 3:00 PM - Press physical button
-- 3:07 PM - Driver detects it's on
-- Timer starts at 55 minutes (60 - 5)
-- 4:02 PM - Auto-shutoff triggers
-- **Total runtime: 62 minutes** 😐
-
-**Analysis:**
-- Intended: 60 min
-- Actual: 62 min
-- Difference: +2 min (ran 2 min over)
-- Safety: ⚠️ Slightly over
-
----
-
-### Scenario C: None + 15 min polling
-**Settings:**
-- Auto-shutoff: 60 minutes
-- Polling interval: 15 minutes
-- Compensation: None
-
-**Timeline:**
-- 3:00 PM - Press physical button
-- 3:14 PM - Driver detects it's on
-- Timer starts at 60 minutes (no compensation)
-- 4:14 PM - Auto-shutoff triggers
-- **Total runtime: 74 minutes** ❌
-
-**Analysis:**
-- Intended: 60 min
-- Actual: 74 min
-- Difference: +14 min (ran 14 min over)
-- Safety: ❌ Significantly over
-
----
-
-### Scenario D: Conservative + 15 min polling
-**Settings:**
-- Auto-shutoff: 60 minutes
-- Polling interval: 15 minutes
-- Compensation: Conservative
-
-**Timeline:**
-- 3:00 PM - Press physical button
-- 3:02 PM - Driver detects it's on (lucky, detected quickly!)
-- Timer starts at 45 minutes (60 - 15)
-- 3:47 PM - Auto-shutoff triggers
-- **Total runtime: 47 minutes** 😞
-
-**Analysis:**
-- Intended: 60 min
-- Actual: 47 min
-- Difference: -13 min (ran 13 min short)
-- Safety: ✅ Never over, but much shorter
-
----
-
-## Recommended Configurations
-
-### For Safety (Recommended for most users)
-```
-Auto-shutoff: 60 minutes
-Polling interval: 5 minutes
-Compensation: Conservative
-```
-**Result:** 55-60 minute runtime, never over, minimal detection delay
-
-### For Accuracy (If you want precise timing)
-```
-Auto-shutoff: 60 minutes
-Polling interval: 1 minute
-Compensation: Balanced
-```
-**Result:** 59-61 minute runtime, very accurate
-
-### For Efficiency (Minimize network traffic)
-```
-Auto-shutoff: 60 minutes
-Polling interval: 15 minutes
-Compensation: Conservative
-```
-**Result:** 45-60 minute runtime, less network load, less predictable
-
-### For Full Runtime (User comfort over precision)
-```
-Auto-shutoff: 60 minutes
-Polling interval: 10 minutes
-Compensation: None
-```
-**Result:** 60-70 minute runtime, may run over but user always gets full time
-
----
-
-## The Tradeoff Triangle
-
-You can't optimize all three - pick what matters most:
+### Recommended Settings for Most Users
 
 ```
-        Safety
-       /      \
-      /        \
-     /  Pick 2  \
-    /____________\
-Efficiency    Accuracy
-```
-
-- **Safety + Accuracy** = Use fast polling (1-5 min) + Conservative
-- **Safety + Efficiency** = Use slow polling (15 min) + Conservative (but less accurate)
-- **Accuracy + Efficiency** = Use slow polling (15 min) + Balanced (but may run over)
-
----
-
-## My Personal Recommendation
-
-Start with these settings and adjust based on experience:
-
-```
-Auto-shutoff timer: 60 minutes
+SaunaBox IP: [Your SaunaBox IP address]
+Default temp: 170°F (or your preference)
+Auto shutoff timer: 60 minutes
 Polling interval when OFF: 5 minutes
 Timer compensation: Conservative
+Use Imperial units: Yes (for Fahrenheit)
+Debug mode: No
 ```
 
-**Why:**
-- 5 min polling is negligible network load
-- Conservative ensures safety feature works
-- Max 5-minute detection delay is acceptable
-- Worst case: 55 minutes instead of 60 (still plenty of sauna time!)
-- If you find you want more time, increase auto-shutoff to 65 or 70
+These settings provide:
+- ✅ Good safety margin (never runs more than ~60 minutes)
+- ✅ Quick detection of external turn-ons (within 5 minutes)
+- ✅ Minimal network load
+- ✅ Predictable behavior
 
-After a week or two, you'll know if you want to adjust:
-- Sauna running too short? → Increase auto-shutoff to 70 min
-- Want less network traffic? → Increase polling to 10 min
-- Want more accuracy? → Change to Balanced compensation
+## Basic Usage
 
----
+### From Hubitat Dashboard
+
+Add your sauna device to a dashboard using the **Thermostat** template:
+- **Temperature** - Current sauna temperature
+- **Setpoint** - Target temperature
+- **Mode** - Heat (on) or Off
+- **Operating State** - Heating or Idle
+
+### From Rules & Automations
+
+Use the sauna in Hubitat rules:
+```
+Trigger: Time is 6:00 PM
+Action: Set Sauna to Heat mode
+Action: Set Sauna temperature to 170°F
+```
+
+```
+Trigger: Sauna temperature >= 165°F
+Action: Send notification "Sauna is ready!"
+```
+
+```
+Trigger: Nobody home
+Action: Set Sauna to Off mode
+```
+
+### Voice Control (via Hubitat integrations)
+
+If you have Alexa or Google Home integrated:
+- "Alexa, turn on the sauna"
+- "Hey Google, set the sauna to 180 degrees"
+- "Alexa, what's the sauna temperature?"
+
+## Understanding Auto-Shutoff & Timer Compensation
+
+### The Challenge
+
+When you turn on your sauna using the physical button (or external app), the Hubitat driver doesn't know immediately. It only discovers the sauna is on during the next polling cycle, which could be up to [polling interval] minutes later.
+
+**Example without compensation:**
+- 3:00 PM - Press physical button
+- 3:14 PM - Driver detects it's on (14 minutes later)
+- 3:14 PM - Timer starts for 60 minutes
+- 4:14 PM - Sauna turns off
+- **Total runtime: 74 minutes** (14 minutes over!)
+
+### The Solution: Timer Compensation
+
+The driver can compensate for this detection delay by adjusting the timer:
+
+#### Conservative (Recommended)
+- Subtracts the **full polling interval** from the timer
+- Guarantees sauna never runs over intended time
+- May run slightly short if detected quickly
+- **Best for safety-conscious users**
+
+#### Balanced
+- Subtracts **half the polling interval** from the timer
+- Averages out across multiple uses
+- May run slightly over or under
+- **Best for accuracy-focused users**
+
+#### None
+- Uses full timer regardless of detection delay
+- User always gets full intended runtime
+- May run over by up to [polling interval]
+- **Only use with fast polling (1-5 min)**
+
+### Example with Compensation
+
+**Settings:** 60-min auto-off, 5-min polling, Conservative
+
+- 3:00 PM - Press physical button
+- 3:03 PM - Driver detects it's on (3 minutes later)
+- 3:03 PM - Timer starts for 55 minutes (60 - 5)
+- 3:58 PM - Sauna turns off
+- **Total runtime: 58 minutes** (safe! ✅)
+
+## Configuration Guide
+
+### Polling Intervals
+
+Choose based on your priorities:
+
+| Interval | Detection Delay | Network Load | Best For |
+|----------|----------------|--------------|----------|
+| 1 minute | < 1 min | High | Maximum responsiveness |
+| **5 minutes** | **< 5 min** | **Low** | **Most users (recommended)** |
+| 10 minutes | < 10 min | Very Low | Balanced efficiency |
+| 15 minutes | < 15 min | Minimal | Network-conscious |
+| 30 minutes | < 30 min | Minimal | Not recommended |
+
+### Auto-Shutoff Duration
+
+Typical ranges:
+- **30-45 minutes**: Quick sessions, gym/club saunas
+- **60 minutes**: Standard home sauna sessions (recommended)
+- **90-120 minutes**: Extended sessions, social gatherings
+
+Tip: If using Conservative compensation with longer polling, increase the auto-shutoff time by 5-10 minutes to account for the timer reduction.
+
+### Compensation Strategies
+
+| Strategy | Runtime Behavior | Trade-off |
+|----------|------------------|-----------|
+| **Conservative** | 55-60 min (5-min poll) | Safety over precision |
+| Balanced | 57.5-62.5 min (5-min poll) | Precision over guarantee |
+| None | 60-65 min (5-min poll) | Comfort over safety |
+
+## Troubleshooting
+
+### Sauna Not Responding
+
+1. Verify SaunaBox IP address is correct
+2. Check that SaunaBox is on your network
+3. Ping the SaunaBox IP from a computer
+4. Check hub logs for error messages
+5. Try the SaunaBox's web interface directly
+
+### Temperature Not Updating
+
+1. Check that sauna is ON (should poll every 1 minute when on)
+2. Enable debug logging in preferences
+3. Check logs during next polling cycle
+4. Verify SaunaBox API is responding
+
+### Timer Not Working
+
+1. Check logs for timer start/stop messages
+2. Verify auto-shutoff timer setting is not 0
+3. Test by turning on sauna and watching for auto-shutoff
+4. Check that timer cancels when turned off manually
+
+### Detection Too Slow
+
+1. Decrease polling interval (try 5 minutes)
+2. Check network latency to SaunaBox
+3. Verify hub schedule is running (check logs)
+
+### Running Too Short/Long
+
+**If running too short:**
+- Increase auto-shutoff duration by 5-10 minutes, OR
+- Change compensation to Balanced, OR
+- Decrease polling interval
+
+**If running too long:**
+- Use Conservative compensation, OR
+- Decrease polling interval, OR
+- Check that timer is actually starting (enable debug logs)
+
+## Advanced Features
+
+### Dashboard Integration
+
+Add to dashboard as thermostat template. Recommended tiles:
+- Current temperature (large)
+- Setpoint control
+- Heat/Off mode toggle
+- Operating state indicator
+
+### Rule Machine Integration
+
+Example automations:
+- **Scheduled warmup**: Turn on sauna 30 minutes before typical usage time
+- **Ready notification**: Alert when target temperature reached
+- **Presence-based shutoff**: Turn off if house mode changes to Away
+- **Temperature presets**: Create scenes for different temperature preferences
+- **Usage tracking**: Log sauna sessions to a virtual device counter
+
+### Logging & Debugging
+
+Enable **Debug mode** in preferences to see detailed logging:
+- API requests and responses
+- Polling schedule changes
+- Timer start/stop events
+- Mode changes and compensation calculations
+- Temperature conversions
+
+## Version History
+
+### Version 1.1.1 (Current)
+- ✅ Fixed auto-shutoff timer bugs
+- ✅ Fixed polling frequency not updating
+- ✅ Added intelligent timer compensation for external turn-ons
+- ✅ Made polling interval configurable
+- ✅ Added three compensation strategies
+- ✅ Improved logging and error handling
+- ✅ Better edge case handling
+
+### Version 1.1.0 (Original)
+- Basic thermostat functionality
+- API integration with SaunaBox
+- Temperature monitoring and control
+- Auto-shutoff timer (with bugs)
+- Basic polling (with bugs)
 
 ## Technical Details
 
-### When Timer Starts:
-- **Via driver/app:** Immediately when you press "heat"
-- **Via physical button:** At next polling cycle (delayed by 0 to [polling interval] minutes)
+### What Got Fixed
 
-### Timer Compensation Only Applies To:
-- External turn-ons (physical button, other apps)
-- Does NOT apply when turned on via this driver
+#### Bug 1: Auto-Shutoff Timer
+**Problem**: Timer only worked when turned on via driver, didn't work with physical button
+**Solution**: 
+- Added state change detection in polling function
+- Timer starts for ANY turn-on event (driver or external)
+- Timer properly cancels for ANY turn-off event
+- Added intelligent compensation for external turn-ons
 
-### Edge Case Handling:
-- If compensated time ≤ 0, sauna turns off immediately
-- Timer always cancels when sauna turns off (any method)
-- Timer always restarts if turned on again
+#### Bug 2: Polling Frequency
+**Problem**: Polling didn't switch between fast/slow based on state
+**Solution**:
+- Created centralized polling schedule function
+- Properly cancels existing schedules before creating new ones
+- Detects external state changes and adjusts accordingly
+- Uses actual device state instead of non-existent state variables
 
-### Network Impact:
-- 1 min polling: 1,440 polls/day when OFF
-- 5 min polling: 288 polls/day when OFF (recommended)
-- 10 min polling: 144 polls/day when OFF
-- 15 min polling: 96 polls/day when OFF
-- When ON: Always 1,440 polls/day (1-min intervals)
+#### Bug 3: Temperature Updates
+**Problem**: Temperature not updating frequently when sauna was on
+**Solution**: 
+- Fixed polling schedule switching
+- Ensures 1-minute polling when heating
+- Immediate schedule update on state change
+
+### API Integration
+
+The driver communicates with the SaunaBox API:
+- **Status endpoint**: `/api/heat/extended/state` - Get current state
+- **Control endpoints**: 
+  - `/s/0` - Turn off
+  - `/s/1` - Turn on
+  - `/s/t/[temp]` - Set temperature (in format XXXX = XX.XX°C)
+
+Temperature conversion:
+- SaunaBox uses format: `XXXX` = `XX.XX°C`
+- Driver handles Fahrenheit/Celsius conversion
+- Example: 170°F → 76.67°C → 7667 (API format)
+
+### Polling Behavior
+
+**When OFF:** Configurable interval (1, 5, 10, 15, or 30 minutes)
+**When ON:** Fixed 1-minute interval
+**Transition:** Immediate when state change detected
+
+### Network Load
+
+Approximate requests per day:
+- **OFF (5 min)**: 288 requests/day
+- **OFF (15 min)**: 96 requests/day
+- **ON (always 1 min)**: 1,440 requests/day
+
+Each request is a lightweight HTTP GET (~200 bytes response)
+
+## Contributing
+
+Found a bug? Have a feature request? 
+- Open an issue with detailed description
+- Include hub logs if reporting a bug
+- Specify your SaunaBox firmware version
+- Include your driver configuration
+
+## License
+
+[Specify your license here]
+
+## Credits
+
+- Original driver: craigde
+- Version 1.1.1 enhancements: [Your credits]
+- Blebox SaunaBox API documentation
+
+## Support
+
+For support:
+1. Check the troubleshooting section above
+2. Enable debug logging and check logs
+3. Post in Hubitat Community forums
+4. Include driver version, SaunaBox firmware, and relevant logs
 
 ---
 
-## Testing Your Configuration
-
-1. Set your desired configuration
-2. Turn on sauna via physical button
-3. Check logs to see:
-   - When external turn-on was detected
-   - What compensated timer was set to
-4. Verify it turns off at expected time
-5. Adjust settings if needed
-
-**Example log output:**
-```
-doPoll: Mode changed from off to heat
-doPoll: External turn-on detected, starting auto-shutoff timer with compensation
-doPoll: Using conservative compensation: 60 - 5 = 55 minutes
-```
-
----
-
-## FAQ
-
-**Q: Why not just use 1-minute polling all the time?**
-A: When sauna is off, you don't need frequent updates. 5-15 minute checks are fine and save hub resources.
-
-**Q: Does compensation apply when I turn on via the app?**
-A: No, only for external turn-ons. When you use the driver/app, timer starts immediately with full duration.
-
-**Q: What if I change settings while sauna is running?**
-A: Changes take effect on next turn-on. Current session continues with old settings.
-
-**Q: Can I disable auto-shutoff completely?**
-A: Not currently, but you can set it to a very high value (e.g., 300 minutes = 5 hours)
-
-**Q: Which strategy should I use?**
-A: Conservative for safety, Balanced for accuracy, None only if you're okay with overtime.
+**Enjoy your smart sauna! 🧖‍♂️**
