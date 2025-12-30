@@ -1,0 +1,21 @@
+{
+  "packageName": "Saunabox Driver",
+  "author": "Craig Dewar",
+  "version": "1.1.1",
+  "minimumHEVersion": "2.3.0",
+  "dateReleased": "2024-12-29",
+  "licenseFile": "",
+  "releaseNotes": "v1.1.1 - Initial HPM release",
+  "documentationLink": "https://github.com/craigde/hubitat-saunabox/blob/main/README.md",
+  "communityLink": "https://community.hubitat.com/",
+  "drivers": [
+    {
+      "id": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+      "name": "Saunabox",
+      "namespace": "craigde",
+      "location": "https://raw.githubusercontent.com/craigde/hubitat-saunabox/main/saunabox.groovy",
+      "required": true,
+      "version": "1.1.1"
+    }
+  ]
+}
