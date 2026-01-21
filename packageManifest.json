@@ -1,11 +1,11 @@
 {
   "packageName": "Saunabox Driver",
   "author": "Craig Dewar",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "minimumHEVersion": "2.3.0",
   "dateReleased": "2024-12-29",
   "licenseFile": "",
-  "releaseNotes": "v1.1.1 - Initial HPM release",
+  "releaseNotes": "v1.1.2 - Major quality and robustness improvements",
   "documentationLink": "https://github.com/craigde/hubitat-saunabox/blob/main/README.md",
   "communityLink": "https://community.hubitat.com/",
   "drivers": [
