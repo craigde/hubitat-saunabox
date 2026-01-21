@@ -289,7 +289,18 @@ Enable **Debug mode** in preferences to see detailed logging:
 
 ## Version History
 
-### Version 1.1.1 (Current)
+### Version 1.1.2 (Current)
+- ✅ Fixed critical temperature conversion bug - added proper formatting and bounds checking
+- ✅ Added comprehensive error handling with try/catch blocks for all API responses
+- ✅ Added input validation for IP addresses and temperature ranges
+- ✅ Converted all synchronous HTTP calls to async for better responsiveness
+- ✅ Added null checks for device state to prevent crashes on first run
+- ✅ Improved error handling consistency across all handlers
+- ✅ Fixed typos and removed unused code
+- ✅ Added constants for magic numbers (refresh delays)
+- ✅ Enhanced robustness and production readiness
+
+### Version 1.1.1
 - ✅ Fixed auto-shutoff timer bugs
 - ✅ Fixed polling frequency not updating
 - ✅ Added intelligent timer compensation for external turn-ons
@@ -307,11 +318,49 @@ Enable **Debug mode** in preferences to see detailed logging:
 
 ## Technical Details
 
-### What Got Fixed
+### What Got Fixed in v1.1.2
+
+#### Critical Bug Fix: Temperature Conversion
+**Problem**: Temperature formatting used substring which crashed for temps < 10°C or >= 100°C
+**Solution**:
+- Replaced unsafe substring with proper String.format()
+- Added temperature range validation (0-125°C)
+- Proper bounds checking before API calls
+
+#### Enhancement: Error Handling
+**Problem**: No error handling for malformed API responses or network failures
+**Solution**:
+- Added try/catch blocks around all JSON parsing
+- Validated API response structure before accessing fields
+- Added error handling to all async HTTP handlers
+- Graceful degradation on errors
+
+#### Enhancement: Async HTTP
+**Problem**: Synchronous HTTP calls blocked execution during API requests
+**Solution**:
+- Converted all HTTP calls to async (asynchttpGet/Post)
+- Added 10-second timeout to all requests
+- Non-blocking command execution for better responsiveness
+
+#### Enhancement: Input Validation
+**Problem**: No validation of user inputs (IP addresses, temperatures)
+**Solution**:
+- Added IP address format validation with regex
+- Added temperature range validation for both °F and °C
+- Prevents invalid API calls before they occur
+
+#### Enhancement: Null Safety
+**Problem**: device.currentValue() could return null on first run causing crashes
+**Solution**:
+- Added null coalescing operators (?:) for all device.currentValue() calls
+- Proper defaults for first-run scenarios
+- Skip state change logic if no previous state exists
+
+### What Got Fixed in v1.1.1
 
 #### Bug 1: Auto-Shutoff Timer
 **Problem**: Timer only worked when turned on via driver, didn't work with physical button
-**Solution**: 
+**Solution**:
 - Added state change detection in polling function
 - Timer starts for ANY turn-on event (driver or external)
 - Timer properly cancels for ANY turn-off event
@@ -327,7 +376,7 @@ Enable **Debug mode** in preferences to see detailed logging:
 
 #### Bug 3: Temperature Updates
 **Problem**: Temperature not updating frequently when sauna was on
-**Solution**: 
+**Solution**:
 - Fixed polling schedule switching
 - Ensures 1-minute polling when heating
 - Immediate schedule update on state change
